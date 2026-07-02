@@ -405,17 +405,25 @@ class PointNet2Regressor(nn.Module):
         xyz     = x[:, :, :3]                          # (B, N, 3)
         normals = x[:, :, 3:]                          # (B, N, 3)
 
-        # Hierarchical local feature learning
-        xyz1, feat1 = self.sa1(xyz, normals)            # (B, 512, 128)
+        # Normalize xyz to unit sphere so fixed radii (0.2, 0.4) work at any scale
+        max_norm = torch.sqrt(torch.max(torch.sum(xyz**2, dim=-1), dim=-1)[0])
+        max_norm = torch.clamp(max_norm, min=1e-8)
+        xyz_norm = xyz / max_norm.view(-1, 1, 1)
+
+        # Hierarchical local feature learning (on normalized coordinates!)
+        xyz1, feat1 = self.sa1(xyz_norm, normals)            # (B, 512, 128)
         xyz2, feat2 = self.sa2(xyz1, feat1)             # (B, 128, 256)
         global_feat = self.sa3(xyz2, feat2)             # (B, 1024)
 
-        # Regression
+        # Regression to normalized volume
         out = F.relu(self.bn1(self.fc1(global_feat)))
         out = self.drop1(out)
         out = F.relu(self.bn2(self.fc2(out)))
         out = self.drop2(out)
-        return self.softplus(self.fc3(out))             # (B, 1), always > 0
+        norm_vol = self.softplus(self.fc3(out))         # (B, 1), always > 0
+        
+        # Scale back up to absolute volume
+        return norm_vol * (max_norm.view(-1, 1) ** 3)
 
 
 def count_parameters(model):

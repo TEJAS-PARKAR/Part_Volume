@@ -157,7 +157,8 @@ class PointCloudDataset(Dataset):
     def __getitem__(self, idx: int):
         row      = self.labels_df.iloc[idx]
         filename = row["filename"]
-        volume   = float(row["volume"])
+        vol_key  = "volume_mm3" if "volume_mm3" in row else "volume"
+        volume   = float(row[vol_key])
 
         # Load raw point cloud (N x 6)
         filepath = os.path.join(self.pc_dir, filename)

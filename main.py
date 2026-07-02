@@ -141,7 +141,6 @@ def step_inference():
     print("\n  " + "-" * 50)
     print("  Inference Demo  [model: %s]" % model_type)
     print("  " + "-" * 50)
-    print("  Shape          : %s" % shape_desc)
     print("  True Volume    : %12.6f" % true_vol)
     print("  Predicted Vol  : %12.6f" % pred_vol)
     print("  Abs Error (%%)  : %11.2f%%" % error_pct)

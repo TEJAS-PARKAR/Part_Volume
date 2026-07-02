@@ -120,8 +120,20 @@ class PointNetRegressor(nn.Module):
         -------
         torch.Tensor  shape (B, 1)  -- predicted volume (always > 0)
         """
-        # Per-point feature extraction
-        feat = self.shared_mlp(x)              # (B, 256, N)
+        # Split coordinates and normals
+        xyz = x[:, :3, :]
+        normals = x[:, 3:, :]
+
+        # Normalize xyz to unit sphere for scale invariance
+        max_norm = torch.sqrt(torch.max(torch.sum(xyz**2, dim=1), dim=-1)[0])
+        max_norm = torch.clamp(max_norm, min=1e-8)
+        xyz_norm = xyz / max_norm.view(-1, 1, 1)
+
+        # Recombine normalized coordinates and normals
+        x_norm = torch.cat([xyz_norm, normals], dim=1)
+
+        # Per-point feature extraction on normalized data
+        feat = self.shared_mlp(x_norm)              # (B, 256, N)
 
         # Global max-pooling over all points
         global_feat = feat.max(dim=2).values   # (B, 256)
@@ -134,9 +146,10 @@ class PointNetRegressor(nn.Module):
         out = self.drop2(out)
 
         out = self.fc3(out)                                # (B, 1)
-        out = self.softplus(out)                           # strictly positive
+        norm_vol = self.softplus(out)                      # strictly positive
 
-        return out
+        # Scale back up to absolute volume
+        return norm_vol * (max_norm.view(-1, 1) ** 3)
 
 
 # ─────────────────────────────────────────────────────────────

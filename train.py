@@ -90,13 +90,23 @@ def train_one_epoch(model, loader, criterion, optimizer, device, grad_clip):
 
         optimizer.zero_grad()
         pred = model(pc)                    # (B, 1)
-        loss = criterion(pred, vol)
+        
+        # Extract max_norm to compute loss on normalized scale
+        xyz = pc[:, :3, :]
+        max_norm = torch.sqrt(torch.max(torch.sum(xyz**2, dim=1), dim=1)[0])
+        max_norm = torch.clamp(max_norm, min=1e-8).view(-1, 1)
+        scale = max_norm ** 3
+
+        # Compute loss on unit-scaled volume to avoid massive gradients
+        loss = criterion(pred / scale, vol / scale)
         loss.backward()
 
         # Gradient clipping prevents exploding gradients
         nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
 
         optimizer.step()
+        # Record loss in its raw scale for human interpretability in logs, if desired, 
+        # or keep it as normalized loss. We keep normalized loss so the scale is reasonable.
         total_loss += loss.item() * pc.size(0)
 
     return total_loss / len(loader.dataset)
@@ -116,7 +126,13 @@ def evaluate(model, loader, criterion, device):
             pc  = pc.to(device)
             vol = vol.to(device).view(-1, 1)
             pred = model(pc)
-            loss = criterion(pred, vol)
+            
+            xyz = pc[:, :3, :]
+            max_norm = torch.sqrt(torch.max(torch.sum(xyz**2, dim=1), dim=1)[0])
+            max_norm = torch.clamp(max_norm, min=1e-8).view(-1, 1)
+            scale = max_norm ** 3
+            
+            loss = criterion(pred / scale, vol / scale)
             total_loss += loss.item() * pc.size(0)
 
     return total_loss / len(loader.dataset)
